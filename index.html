@@ -101,6 +101,38 @@
             transform: scale(1.05);
             box-shadow: 0 0 30px rgba(155, 89, 182, 0.8);
         }
+        /* 手机虚拟摇杆 */
+        #joystick-area {
+            display: none;
+            position: absolute;
+            bottom: 30px;
+            left: 30px;
+            width: 140px;
+            height: 140px;
+            background: rgba(155, 89, 182, 0.2);
+            border: 2px solid rgba(155, 89, 182, 0.5);
+            border-radius: 50%;
+            z-index: 20;
+            touch-action: none;
+        }
+        #joystick-knob {
+            position: absolute;
+            width: 50px;
+            height: 50px;
+            background: rgba(155, 89, 182, 0.8);
+            border-radius: 50%;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 10px rgba(155, 89, 182, 0.5);
+        }
+        /* 手机端显示摇杆 */
+        @media (pointer: coarse) {
+            #joystick-area { display: block; }
+        }
+        @media (max-width: 768px) {
+            #joystick-area { display: block; }
+        }
         .btn-small {
             padding: 8px 20px;
             font-size: 14px;
@@ -2420,7 +2452,79 @@
         ctx.fillText(singer.name.substring(0, 2), w/2, h * 0.85);
     }
 
-    // 初始化
+    // ==================== 手机虚拟摇杆 ====================
+    const joystickArea = document.createElement('div');
+    joystickArea.id = 'joystick-area';
+    const joystickKnob = document.createElement('div');
+    joystickKnob.id = 'joystick-knob';
+    joystickArea.appendChild(joystickKnob);
+    document.body.appendChild(joystickArea);
+
+    let joystickActive = false;
+    let joystickTouchId = null;
+    let joystickCenterX = 0, joystickCenterY = 0;
+    const joystickRadius = 70;
+    const knobRadius = 25;
+
+    function handleJoystickMove(touch) {
+        const rect = joystickArea.getBoundingClientRect();
+        const touchX = touch.clientX - rect.left;
+        const touchY = touch.clientY - rect.top;
+        const dx = touchX - joystickCenterX;
+        const dy = touchY - joystickCenterY;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        const maxDist = joystickRadius - knobRadius;
+
+        let ratio = 1;
+        if (dist > maxDist) ratio = maxDist / dist;
+
+        const knobX = dx * ratio;
+        const knobY = dy * ratio;
+
+        joystickKnob.style.transform = `translate(calc(-50% + ${knobX}px), calc(-50% + ${knobY}px))`;
+
+        // 映射摇杆位置到按键
+        const threshold = 10;
+        keys['w'] = dy < -threshold;
+        keys['s'] = dy > threshold;
+        keys['a'] = dx < -threshold;
+        keys['d'] = dx > threshold;
+    }
+
+    joystickArea.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        if (joystickActive) return;
+        joystickActive = true;
+        const touch = e.changedTouches[0];
+        joystickTouchId = touch.identifier;
+        const rect = joystickArea.getBoundingClientRect();
+        joystickCenterX = rect.width / 2;
+        joystickCenterY = rect.height / 2;
+        handleJoystickMove(touch);
+    }, {passive: false});
+
+    document.addEventListener('touchmove', (e) => {
+        if (!joystickActive) return;
+        e.preventDefault();
+        for (const touch of e.changedTouches) {
+            if (touch.identifier === joystickTouchId) {
+                handleJoystickMove(touch);
+                break;
+            }
+        }
+    }, {passive: false});
+
+    const resetJoystick = () => {
+        joystickActive = false;
+        joystickTouchId = null;
+        joystickKnob.style.transform = 'translate(-50%, -50%)';
+        keys['w'] = keys['s'] = keys['a'] = keys['d'] = false;
+    };
+
+    joystickArea.addEventListener('touchend', resetJoystick);
+    joystickArea.addEventListener('touchcancel', resetJoystick);
+
+    // ==================== 初始化 ====================
     window.addEventListener('load', () => {
         // 歌手头像已使用真实图片，无需 Canvas 绘制
         requestAnimationFrame(gameLoop);
